@@ -1,7 +1,7 @@
 
-.PHONY: all 1182 1417 3321 1990 3294 3415 1470 1986 2777 3277 test
+.PHONY: all 1182 1417 3321 1990 3294 3415 1470 1986 2777 3277 3159 test
 
-PROBLEMS = 1182 1417 3321 1990 3294 3415 1470 1986 2777 3277
+PROBLEMS = 1182 1417 3321 1990 3294 3415 1470 1986 2777 3277 3159
 
 all: $(PROBLEMS)
 
@@ -35,6 +35,9 @@ all: $(PROBLEMS)
 3277: src/3277.c
 	@gcc src/3277.c -o bin/3277
 
+3159: src/3159.c
+	@gcc src/3159.c -o bin/3159
+
 test: $(PROBLEMS)
 	@echo [TEST] Testing poj 1182...
 	@echo [testcase 1]
@@ -66,3 +69,6 @@ test: $(PROBLEMS)
 	@echo [TEST] Testing poj 3277...
 	@echo [testcase 1]
 	@bin/3277 < test/3277/tc1
+	@echo [TEST] Testing poj 3159...
+	@echo [testcase 1]
+	@bin/3159 < test/3159/tc1
