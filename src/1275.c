@@ -1,13 +1,41 @@
 /*
  * POJ 1275 Cashier Employment
  * 
+ * Another differential constraints problem, this one is a bit
+ * harder to construct the graph than POJ 3159. To get our
+ * inequalities system, we define three arrays:
+ * 
+ * - required[i]: the least number of cashier needed at time `i`
+ * - applicants[i]: the number of applicants at time `i`
+ * - sum[i]: the total number of cashier hired in past `i` time slots
+ * 
+ * Appearantly `sum[i] >= sum[i-1]`. Besides, since the number of
+ * applicants hired at time `i` could not be more than applicants[i],
+ * there is `sum[i] - sum[i-1] <= applicants[i]` too. 
+ * 
+ * When i<7, all cashiers hired today (sum[i]) and some who were
+ * hired yesterday (sum[23] - sum[i+16]) are working, so we should
+ * ensure that `sum[i] + sum[23] - sum[i+16] >= required[i]`. And
+ * when i>=7, all cashiers working are hired today, so we only need
+ * to ensure that `sum[i] - sum[i-8] >= required[i]`.
+ * 
+ * So all constraints are:
+ * 
+ * - sum[i] >= sum[i-1]
+ * - sum[i] - sum[i-1] <= applicants[i]
+ * - sum[i] + sum[23] - sum[i+16] >= required[i] (i <= 8)
+ * - sum[i] - sum[i-8] >= required[i] (i > 8)
+ * 
+ * Transform them into standard form, and use SPFA to obtain
+ * the longest path.
+ * 
  */
  
 #include <stdio.h>
 #include <string.h>
 
-#define MAX_N 30001
-#define MAX_E 150001
+#define MAX_N 1001
+#define MAX_E 1001
 
 /*
  * Graph APIs
@@ -59,75 +87,135 @@ void init_graph() {
 
 #define INF 0x3f3f3f3f
 
-// Use stack instead of queue here
-int stack[MAX_N];
+// Use queue as memory
+int queue[MAX_N];
 int visited[MAX_N];
-int stack_top = 0;
+int q_head;
+int q_tail;
 
 // DP memory
 int distance[MAX_N];
 
-// SPFA algo.
-void SPFA(int start, int n) {
-  stack_top = 0;
+// SPFA algo to obtain the longest path.
+int SPFA(int start, int n) {
+  q_head = q_tail = 0;
 
-  // init the stack
-  for (int i = 1; i <= n; i++) {
+  // Record how many times each vertex's distance
+  // has been updated too avoid infinite loop.
+  int cnt[MAX_N];
+
+  // init the queue
+  for (int i = 0; i <= n; i++) {
     if (i == start) {
-      stack[stack_top++] = i;
+      queue[q_head] = i;
+      q_head = (q_head+1) % MAX_N;
       visited[i] = 1;
       distance[i] = 0;
     } else {
       visited[i] = 0;
-      distance[i] = INF;
+      distance[i] = -INF;
     }
+    cnt[i] = 0;
   }  
 
   // DP with a loop
-  while (stack_top) {
+  while (q_head != q_tail) {
 
-    // Pick a vertex out of stack
-    int from = stack[--stack_top];
+    // Pick a vertex out of queue
+    int from = queue[q_tail];
+    q_tail = (q_tail+1) % MAX_N;
     visited[from] = 0;
 
     // For each edge starts from this vertex, 
     // update its distance. If a vertex's distance
-    // is updated, push it back to stack.
+    // is updated, push it back to queue.
     for (int i = head[from]; i != END; i = edges[i].next) {
       int to = edges[i].to;
-      if (distance[to] > distance[from] + edges[i].weight) {
+      if (distance[to] < distance[from] + edges[i].weight) {
         distance[to] = distance[from] + edges[i].weight;
         if (!visited[to]) {
           visited[to] = 1;
-          stack[stack_top++] = to;
+          queue[q_head] = to;
+          q_head = (q_head + 1) % MAX_N;
         }
+
+        // Avoid the infinite loop
+        if (++cnt[to] > n) return 0;
       }
     }
   }
+
+  return 1;
 }
+
+/*
+ * Related to problem
+ */
+
+int required[MAX_N];
+int applicants[MAX_N];
 
 int main() {
 
-  // Get the size of input
   int N, M;
-  scanf("%d%d", &N, &M);
 
-  // Init the graph
-  init_graph();
-  
-  // Get all constraints and construct a graph out of them
-  for (int i = 0; i < M; i++) {
-    int A, B, c;
-    scanf("%d%d%d", &A, &B, &c);
+  // There will be N testcases
+  scanf("%d", &N);
+  for (int i = 0; i < N; i++) {
 
-    // The problem requires B-A <= c, which is equivalent
-    // to B <= A + c, so c should be the weight.
-    add_edge(A, B, c);
+    // At first we don't have any applicants
+    memset(applicants, 0, sizeof(applicants));
+
+    // Get inputted data
+    for (int i = 1; i <= 24; i++)
+      scanf("%d", &required[i]);
+    scanf("%d\n", &M);
+    for (int i = 0; i < M; i++) {
+      int time;
+      scanf("%d", &time);
+      applicants[time+1]++;
+    }
+
+    // Run binary search on sum[23], try
+    // each possible sum[23] until we find
+    // a proper one.
+    int l = 0, r = M+1, ans = INF;
+    while (l <= r) {
+
+      // mid is the expected value of sum[23]
+      int mid = (l+r)/2;
+
+      // Don't forget to clean the graph
+      init_graph();
+
+      // For constraints without limited range of i,
+      // add an edge for each time slot.
+      for (int i = 1; i <= 24; i++) {
+        add_edge(i-1, i, 0);
+        add_edge(i, i-1, -applicants[i]);
+      }
+
+      // For constraints with limited i, only add edges
+      // for proper time slots.
+      for (int i = 1; i <= 8; i++) add_edge(i+16, i, required[i] - mid);
+      for (int i = 9; i <= 24; i++) add_edge(i-8, i, required[i]);
+
+      // A proper sum[23] must satisfy this.
+      add_edge(0, 24, mid);
+
+      // Run SPFA, if this mid is proper, store its value
+      // and shrink the range.
+      if (SPFA(0, 24) && distance[24] == mid) {
+        ans = mid;
+        r = mid-1;
+      } else l = mid+1;
+    }
+
+    // ans > M indicates that the binary search
+    // failed to find a proper solution.
+    if (ans <= M) printf("%d\n", ans);
+    else printf("No Solution\n");
   }
-
-  // Use SPFA to solve this problem.
-  SPFA(1, N);
-  printf("%d\n", distance[N]);
 
   return 0;
 }
